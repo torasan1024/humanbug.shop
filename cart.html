@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ショッピングカート - ヒューマンバグ大学</title>
+    <link href="https://fonts.googleapis.com/css?family=Noto+Serif+JP:400,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .cart-container { max-width: 800px; margin: 100px auto; padding: 0 20px; }
+        .cart-title { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; font-weight: bold; }
+        .cart-item { display: flex; align-items: center; gap: 20px; padding: 15px 0; border-bottom: 1px solid #eee; }
+        .cart-item img { width: 80px; height: 80px; object-fit: cover; background: #f9f9f9; border-radius: 4px; }
+        .cart-item-info { flex-grow: 1; }
+        .cart-item-name { font-weight: bold; margin-bottom: 5px; font-size: 15px; }
+        .cart-item-price { color: #666; font-size: 14px; }
+        
+        .cart-item-controls { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+        .qty-btn { width: 32px; height: 32px; border: 1px solid #333; background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: bold; border-radius: 4px; }
+        .qty-btn:hover { background: #f0f0f0; }
+        .item-qty { font-weight: bold; min-width: 24px; text-align: center; font-size: 16px; }
+        
+        .remove-item-btn { margin-left: auto; color: #ff0000; background: none; border: none; cursor: pointer; font-size: 12px; text-decoration: underline; padding: 5px; }
+
+        .total-area { text-align: right; margin-top: 20px; font-size: 18px; font-weight: bold; }
+        .cart-actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 30px; gap: 15px; }
+        .back-btn { text-decoration: none; color: #000; font-weight: bold; border: 1px solid #000; padding: 12px 24px; transition: all 0.3s; }
+        .back-btn:hover { background: #000; color: #fff; }
+        
+        .btn-group { display: flex; gap: 10px; }
+        .clear-btn { background: #999; color: #fff; border: none; padding: 12px 20px; cursor: pointer; font-family: inherit; font-weight: bold; border-radius: 4px; }
+        .buy-btn { background: #000; color: #fff; border: none; padding: 12px 30px; cursor: pointer; font-family: inherit; font-weight: bold; border-radius: 4px; font-size: 16px; }
+        .buy-btn:hover { opacity: 0.8; }
+        .buy-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+        /* オリジナル警告・完了モーダルのスタイル */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 50000; opacity: 0; transition: opacity 0.3s ease; }
+        .modal-overlay.active { display: flex; opacity: 1; }
+        .modal-content { background: #fff; padding: 30px; border-radius: 8px; max-width: 400px; width: 90%; text-align: center; transform: translateY(20px); transition: transform 0.3s ease; }
+        .modal-overlay.active .modal-content { transform: translateY(0); }
+        .modal-text { font-weight: bold; margin-bottom: 25px; line-height: 1.6; white-space: pre-wrap; }
+        .modal-btns { display: flex; gap: 10px; justify-content: center; }
+        .modal-btn { padding: 10px 25px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; font-family: inherit; }
+        .btn-cancel { background: #eee; color: #333; }
+        .btn-confirm { background: #000; color: #fff; }
+        .btn-danger { background: #ff0000; color: #fff; }
+    </style>
+</head>
+<body>
+
+<div class="fixed-bar">
+    <div class="bar-left">
+        <div class="icon-box-fixed" style="width:auto; padding: 0;">
+            <a href="index.html" style="color:#fff; text-decoration:none; font-weight:bold; padding: 0 20px; display: flex; align-items: center; height: 100%;">← STORE</a>
+        </div>
+    </div>
+</div>
+
+<main class="cart-container">
+    <h2 class="cart-title">ショッピングカート</h2>
+    <div id="cart-list"></div>
+    
+    <div id="total-display" class="total-area" style="display:none;">
+        合計金額: ¥<span id="total-price">0</span>
+    </div>
+    
+    <div id="cart-footer" class="cart-actions" style="display:none;">
+        <a href="index.html" class="back-btn">買い物を続ける</a>
+        <div class="btn-group">
+            <button class="clear-btn" id="clearCart">空にする</button>
+            <button class="buy-btn" id="buyCart">購入する</button>
+        </div>
+    </div>
+</main>
+
+<div id="customModal" class="modal-overlay">
+    <div class="modal-content">
+        <p id="modalMessage" class="modal-text">メッセージ</p>
+        <div class="modal-btns" id="modalBtnContainer">
+            <button id="modalCancel" class="modal-btn btn-cancel">キャンセル</button>
+            <button id="modalConfirm" class="modal-btn btn-confirm">OK</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const cartList = document.getElementById('cart-list');
+    const cartFooter = document.getElementById('cart-footer');
+    const totalDisplay = document.getElementById('total-display');
+    const totalPriceEl = document.getElementById('total-price');
+    const clearCartBtn = document.getElementById('clearCart');
+    const buyCartBtn = document.getElementById('buyCart');
+
+    // モーダル用要素
+    const customModal = document.getElementById('customModal');
+    const modalMessage = document.getElementById('modalMessage');
+    const modalCancel = document.getElementById('modalCancel');
+    const modalConfirm = document.getElementById('modalConfirm');
+    const modalBtnContainer = document.getElementById('modalBtnContainer');
+
+    // GAS ウェブアプリのURL
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbwOwU0dKfRnrpp8WO3jg0VxroUed-Ldn7eUb4FQyPNXS0OQXBhPr9s27D5B6d8fXCAn7Q/exec";
+
+    // カスタム確認・警告ダイアログ関数
+    function showCustomAlert(message, type = 'confirm', isDanger = false) {
+        return new Promise((resolve) => {
+            modalMessage.textContent = message;
+            customModal.classList.add('active');
+            
+            if (type === 'alert') {
+                modalCancel.style.display = 'none';
+                modalConfirm.textContent = '閉じる';
+            } else {
+                modalCancel.style.display = 'block';
+                modalConfirm.textContent = 'OK';
+            }
+
+            modalConfirm.className = isDanger ? 'modal-btn btn-danger' : 'modal-btn btn-confirm';
+
+            const onConfirm = () => { cleanup(); resolve(true); };
+            const onCancel = () => { cleanup(); resolve(false); };
+            const cleanup = () => {
+                customModal.classList.remove('active');
+                modalConfirm.removeEventListener('click', onConfirm);
+                modalCancel.removeEventListener('click', onCancel);
+            };
+
+            modalConfirm.addEventListener('click', onConfirm);
+            modalCancel.addEventListener('click', onCancel);
+        });
+    }
+
+    function renderCart() {
+        const cartData = JSON.parse(localStorage.getItem('bug_university_cart')) || [];
+        cartList.innerHTML = '';
+        let total = 0;
+
+        if (cartData.length === 0) {
+            cartList.innerHTML = '<p class="empty-message">カートの中身は空です。</p><div style="text-align:center;"><a href="index.html" class="back-btn">商品を見る</a></div>';
+            cartFooter.style.display = 'none';
+            totalDisplay.style.display = 'none';
+            return;
+        }
+
+        cartFooter.style.display = 'flex';
+        totalDisplay.style.display = 'block';
+
+        const summary = {};
+        cartData.forEach(item => {
+            if (!summary[item.name]) {
+                summary[item.name] = { ...item, count: 0 };
+            }
+            summary[item.name].count += 1;
+        });
+
+        Object.values(summary).forEach((item) => {
+            const itemTotal = item.price * item.count;
+            total += itemTotal;
+
+            const el = document.createElement('div');
+            el.className = 'cart-item';
+            el.innerHTML = `
+                <img src="${item.img}" alt="商品画像">
+                <div class="cart-item-info">
+                    <p class="cart-item-name">${item.name}</p>
+                    <p class="cart-item-price">単価: ¥${item.price.toLocaleString()}</p>
+                    <div class="cart-item-controls">
+                        <button class="qty-btn" onclick="updateQty('${item.name}', -1)">−</button>
+                        <span class="item-qty">${item.count}</span>
+                        <button class="qty-btn" onclick="updateQty('${item.name}', 1)">＋</button>
+                        <button class="remove-item-btn" onclick="handleRemove('${item.name}')">削除</button>
+                    </div>
+                </div>
+            `;
+            cartList.appendChild(el);
+        });
+
+        totalPriceEl.textContent = total.toLocaleString();
+    }
+
+    window.handleRemove = async function(name) {
+        const confirmed = await showCustomAlert(`「${name}」をカートから削除しますか？`, 'confirm', true);
+        if (confirmed) {
+            updateQty(name, -999);
+        }
+    };
+
+    window.updateQty = function(productName, delta) {
+        let cartData = JSON.parse(localStorage.getItem('bug_university_cart')) || [];
+        if (delta > 0) {
+            const baseItem = cartData.find(i => i.name === productName);
+            if (baseItem) cartData.push({ ...baseItem });
+        } else if (delta < 0) {
+            if (delta === -999) {
+                cartData = cartData.filter(i => i.name !== productName);
+            } else {
+                const lastIndex = cartData.findLastIndex(i => i.name === productName);
+                if (lastIndex !== -1) cartData.splice(lastIndex, 1);
+            }
+        }
+        localStorage.setItem('bug_university_cart', JSON.stringify(cartData));
+        renderCart();
+    };
+
+    clearCartBtn.addEventListener('click', async () => {
+        const confirmed = await showCustomAlert('カート内の商品をすべて削除しますか？', 'confirm', true);
+        if (confirmed) {
+            localStorage.removeItem('bug_university_cart');
+            renderCart();
+        }
+    });
+
+    // --- 修正：購入ボタンの処理（GAS連携） ---
+    buyCartBtn.addEventListener('click', async () => {
+        const cartData = JSON.parse(localStorage.getItem('bug_university_cart')) || [];
+        if (cartData.length === 0) return;
+
+        // 確認ダイアログ
+        const confirmBuy = await showCustomAlert("この内容で注文を確定してもよろしいですか？", 'confirm');
+        if (!confirmBuy) return;
+
+        // 送信データの準備
+        const summary = {};
+        cartData.forEach(item => {
+            summary[item.name] = (summary[item.name] || 0) + 1;
+        });
+
+        let orderDetails = "";
+        for (const [name, qty] of Object.entries(summary)) {
+            orderDetails += `・${name} x ${qty}\n`;
+        }
+        const totalAmount = totalPriceEl.textContent;
+
+        // UI状態の変更
+        buyCartBtn.disabled = true;
+        buyCartBtn.textContent = "送信中...";
+
+        try {
+            // GASへのPOST送信
+            await fetch(GAS_URL, {
+                method: "POST",
+                mode: "no-cors", 
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    itemName: orderDetails,
+                    price: totalAmount
+                })
+            });
+
+            // 成功メッセージの表示
+            const successMessage = "お買い上げ誠にありがとうございます！\n購入完了のメールを送信しました。\n支払いは受け渡しの際に行います。";
+            await showCustomAlert(successMessage, 'alert');
+            
+            // カートをクリア
+            localStorage.removeItem('bug_university_cart');
+            renderCart();
+
+        } catch (error) {
+            console.error("送信エラー:", error);
+            await showCustomAlert("送信中にエラーが発生しました。インターネット接続を確認してください。", "alert", true);
+        } finally {
+            buyCartBtn.disabled = false;
+            buyCartBtn.textContent = "購入する";
+        }
+    });
+
+    renderCart();
+</script>
+</body>
+</html>
