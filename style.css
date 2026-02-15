@@ -1,7 +1,7 @@
 /* 1. フォント定義 */
 @font-face {
     font-family: 'MyCustomFont';
-    src: url('fonts/アプリ明朝.otf');
+    src: url('アプリ明朝.otf');
 }
 
 body {
